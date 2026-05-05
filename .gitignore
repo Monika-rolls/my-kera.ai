@@ -1,0 +1,43 @@
+# Environment files — NEVER commit real credentials
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+*.db
+*.sqlite3
+appointments.db
+
+# Node
+node_modules/
+dist/
+.npm/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# LiveKit VAD model cache
+*.onnx
+silero_vad/

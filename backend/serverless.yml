@@ -1,0 +1,46 @@
+service: mykare-voice-api
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  region: ${opt:region, 'us-east-1'}
+  architecture: x86_64
+  # ECR image for the REST API (Lambda container)
+  ecr:
+    images:
+      api:
+        path: .
+        file: Dockerfile
+
+  environment:
+    LIVEKIT_URL: ${env:LIVEKIT_URL}
+    LIVEKIT_API_KEY: ${env:LIVEKIT_API_KEY}
+    LIVEKIT_API_SECRET: ${env:LIVEKIT_API_SECRET}
+    DEEPGRAM_API_KEY: ${env:DEEPGRAM_API_KEY}
+    CARTESIA_API_KEY: ${env:CARTESIA_API_KEY}
+    OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+    # Use Supabase Postgres in production — Lambda has no persistent FS
+    DATABASE_URL: ${env:DATABASE_URL}
+
+functions:
+  api:
+    image:
+      name: api
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+      - httpApi:
+          path: /
+          method: ANY
+    timeout: 30
+    memorySize: 512
+    reservedConcurrency: 20
+
+plugins:
+  - serverless-offline
+
+# NOTE: The LiveKit agent worker (Dockerfile.agent) is NOT serverless —
+# it requires a persistent WebSocket connection to LiveKit Cloud.
+# Deploy it separately via docker-compose or a managed container service
+# (Railway, Fly.io, AWS ECS, etc.).

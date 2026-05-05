@@ -45,20 +45,5 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # React frontend
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=http://localhost:8000
-        - VITE_LIVEKIT_URL=${LIVEKIT_URL}
-    container_name: mykare-frontend
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
-    restart: unless-stopped
-
 volumes:
   db-data:

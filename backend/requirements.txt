@@ -1,5 +1,5 @@
-livekit-agents[openai,deepgram,cartesia,silero]>=1.0.0
-livekit>=0.17.0
+# REST API only — used by Vercel and the API Docker container
+# Does NOT include livekit-agents (PyTorch/Silero = ~1.5GB, exceeds Vercel 250MB limit)
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 sqlalchemy[asyncio]>=2.0.30
@@ -10,4 +10,5 @@ openai>=1.35.0
 httpx>=0.27.0
 pydantic>=2.7.0
 pydantic-settings>=2.3.0
+livekit>=0.17.0
 mangum>=0.17.0

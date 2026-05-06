@@ -1,0 +1,18 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    gcc \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements-agent.txt .
+RUN pip install --no-cache-dir -r requirements-agent.txt
+
+# Download VAD model at build time so container starts faster
+RUN python -c "from livekit.plugins import silero; silero.VAD.load()"
+
+COPY backend/ .
+
+CMD ["python", "-m", "app.agent"]

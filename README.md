@@ -23,9 +23,27 @@ Voice_agents/
 │   ├── Dockerfile.agent     ← LiveKit agent worker container
 │   ├── vercel.json          ← Vercel deployment config
 │   └── serverless.yml       ← AWS Lambda alternative
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── LandingScreen.tsx  ← Pre-call landing page
+│   │   │   ├── CallScreen.tsx     ← 3-column call UI
+│   │   │   ├── Avatar.tsx         ← Canvas animated avatar (mouth sync)
+│   │   │   ├── Transcript.tsx     ← Live conversation transcript
+│   │   │   ├── ActivityFeed.tsx   ← Real-time tool event feed
+│   │   │   └── SummaryModal.tsx   ← Post-call summary modal
+│   │   ├── hooks/
+│   │   │   └── useLiveKit.ts      ← LiveKit connection + event routing
+│   │   ├── App.tsx
+│   │   ├── api.ts                 ← Axios REST client
+│   │   └── types.ts               ← Shared TypeScript types
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── .env.example
+├── Dockerfile.railway-agent ← Railway-compatible agent Dockerfile
+├── railway.json             ← Railway auto-deploy config
 ├── .env.example             ← All environment variables (template)
 ├── docker-compose.yml       ← Local dev (API + agent together)
-├── frontend.md              ← Frontend spec for Lovable
 └── README.md
 ```
 
@@ -163,7 +181,7 @@ CARTESIA_API_KEY=sk_car_...
 DATABASE_URL=sqlite+aiosqlite:///./appointments.db
 ```
 
-### 3. Terminal 1 — REST API
+### 3. Terminal 1 — REST API (optional — frontend talks to this)
 
 ```bash
 cd backend
@@ -175,6 +193,8 @@ API available at `http://localhost:8000`
 Interactive docs at `http://localhost:8000/docs`
 
 ### 4. Terminal 2 — Agent Worker
+
+
 
 ```bash
 cd backend
@@ -191,6 +211,17 @@ LLM: Gemini (gemini-2.0-flash)   # or OpenAI depending on LLM_PROVIDER
 The agent is now live and joins any LiveKit room where a participant connects.
 
 > To switch LLM providers, just change `LLM_PROVIDER` (and the matching API key) in `.env` and restart the agent worker. No code changes needed.
+
+### 5. Terminal 3 — Frontend
+
+```bash
+cd frontend
+cp .env.example .env       # set VITE_API_URL=http://localhost:8000
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000` — click **Start Call** to talk to Mia.
 
 ---
 
@@ -262,16 +293,31 @@ Your API will be live at: `https://mykare-voice-api.vercel.app`
 
 The agent worker cannot be serverless — it holds a persistent WebSocket to LiveKit Cloud.
 
+The repo includes `railway.json` and `Dockerfile.railway-agent` at the root so Railway auto-detects everything without any dashboard configuration.
+
 1. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
-2. Select this repo
-3. Set **Root Directory** → `backend`
-4. Set **Dockerfile** → `Dockerfile.agent`
-5. Add all environment variables (LiveKit keys + LLM keys + Deepgram + Cartesia + DATABASE_URL)
-6. Deploy
+2. Select this repo — Railway picks up `railway.json` automatically
+3. Add environment variables (Settings → Variables):
+
+| Variable | Required |
+|----------|----------|
+| `LIVEKIT_URL` | Yes |
+| `LIVEKIT_API_KEY` | Yes |
+| `LIVEKIT_API_SECRET` | Yes |
+| `LLM_PROVIDER` | Yes (`openai` or `gemini`) |
+| `LLM_MODEL` | Optional |
+| `OPENAI_API_KEY` | If using OpenAI |
+| `GEMINI_API_KEY` | If using Gemini |
+| `DEEPGRAM_API_KEY` | Yes |
+| `CARTESIA_API_KEY` | Yes |
+| `DATABASE_URL` | Yes (Supabase URL) |
+
+4. Deploy
 
 Railway keeps the container running 24/7. The agent is ready when it logs:
 ```
 INFO registered worker {"url": "wss://...livekit.cloud", "region": "..."}
+LLM: Gemini (gemini-2.0-flash)
 ```
 
 **Alternatives to Railway:** Render, Fly.io, AWS ECS, DigitalOcean App Platform.

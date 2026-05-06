@@ -3,10 +3,28 @@ from openai import AsyncOpenAI
 
 from .config import settings
 
-_client = AsyncOpenAI(api_key=settings.openai_api_key)
+_client: AsyncOpenAI | None = None
+_model: str = ""
+
+
+def _get_client() -> tuple[AsyncOpenAI, str]:
+    global _client, _model
+    if _client is None:
+        if settings.llm_provider.lower() == "gemini":
+            _client = AsyncOpenAI(
+                api_key=settings.gemini_api_key,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            )
+            _model = settings.llm_model or "gemini-2.0-flash"
+        else:
+            _client = AsyncOpenAI(api_key=settings.openai_api_key)
+            _model = settings.llm_model or "gpt-4o"
+    return _client, _model
 
 
 async def generate_call_summary(transcript: list[dict], appointments: list[dict]) -> dict:
+    client, model = _get_client()
+
     transcript_text = "\n".join(
         f"{msg['role'].upper()}: {msg['content']}" for msg in transcript
     )
@@ -34,8 +52,8 @@ Return ONLY valid JSON with these exact keys:
 }}"""
 
     try:
-        response = await _client.chat.completions.create(
-            model="gpt-4o",
+        response = await client.chat.completions.create(
+            model=model,
             max_tokens=1024,
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],

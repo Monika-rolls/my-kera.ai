@@ -1,6 +1,6 @@
 # Agent worker only — used by Dockerfile.agent and Railway/Render deployment
 # Includes livekit-agents with all voice plugins (Deepgram, Cartesia, Silero VAD, OpenAI)
-livekit-agents[openai,deepgram,cartesia,silero]>=1.0.0
+livekit-agents[openai,deepgram,cartesia,silero,google]>=1.0.0
 livekit>=0.17.0
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0

@@ -13,7 +13,8 @@ from livekit.agents import (
     cli,
     function_tool,
 )
-from livekit.plugins import openai, cartesia, deepgram, silero
+from livekit.plugins import cartesia, deepgram, silero
+from livekit.plugins import openai as openai_plugin
 
 from .config import settings
 from .database import init_db
@@ -21,6 +22,21 @@ from . import tools as tool_funcs
 from .summary import generate_call_summary
 
 logger = logging.getLogger("mykare.agent")
+
+
+def _build_llm():
+    provider = settings.llm_provider.lower()
+    if provider == "gemini":
+        from livekit.plugins import google as google_plugin
+        model = settings.llm_model or "gemini-2.0-flash"
+        logger.info(f"LLM: Gemini ({model})")
+        return google_plugin.LLM(
+            model=model,
+            api_key=settings.gemini_api_key or None,
+        )
+    model = settings.llm_model or "gpt-4o"
+    logger.info(f"LLM: OpenAI ({model})")
+    return openai_plugin.LLM(model=model, api_key=settings.openai_api_key or None)
 
 SYSTEM_PROMPT = """You are Mia, a warm and professional AI front-desk assistant for Mykare Health clinic.
 Your role is to help patients with appointment scheduling and management.
@@ -196,7 +212,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     session = AgentSession(
         stt=deepgram.STT(api_key=settings.deepgram_api_key, language="en-US"),
-        llm=openai.LLM(model="gpt-4o", api_key=settings.openai_api_key),
+        llm=_build_llm(),
         tts=cartesia.TTS(api_key=settings.cartesia_api_key),
         vad=silero.VAD.load(),
     )

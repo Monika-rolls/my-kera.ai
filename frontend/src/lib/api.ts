@@ -4,12 +4,64 @@ const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const api = axios.create({ baseURL: BASE, timeout: 15_000 });
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
 export async function getToken(roomName: string, participantName = "user") {
   const res = await api.post("/token", { room_name: roomName, participant_name: participantName });
   return res.data as { token: string; room_name: string; livekit_url: string };
 }
 
-export async function getAppointments(phoneNumber: string) {
+// ── Categories ────────────────────────────────────────────────────────────────
+
+export interface Category {
+  id: number;
+  name: string;
+  display_name: string;
+  description: string;
+  icon: string;
+}
+
+export async function getCategories(): Promise<Category[]> {
+  const res = await api.get("/categories");
+  return res.data as Category[];
+}
+
+// ── Doctors ───────────────────────────────────────────────────────────────────
+
+export interface Doctor {
+  id: number;
+  name: string;
+  specialization: string;
+  category_id: number | null;
+  available_days: string[];
+  available_times: string[];
+}
+
+export async function getDoctors(specialization?: string, categoryId?: number): Promise<Doctor[]> {
+  const res = await api.get("/doctors", {
+    params: {
+      ...(specialization ? { specialization } : {}),
+      ...(categoryId ? { category_id: categoryId } : {}),
+    },
+  });
+  return res.data as Doctor[];
+}
+
+// ── Appointments ──────────────────────────────────────────────────────────────
+
+export interface Appointment {
+  id: number;
+  date: string;
+  time: string;
+  status: string;
+  doctor_name?: string;
+  category_name?: string;
+  email?: string;
+  notes?: string;
+  created_at?: string;
+}
+
+export async function getAppointments(phoneNumber: string): Promise<Appointment[]> {
   const res = await api.get(`/appointments/${phoneNumber}`);
   return res.data as Appointment[];
 }
@@ -19,14 +71,44 @@ export async function postSummary(transcript: Message[], appointments: unknown[]
   return res.data as CallSummary;
 }
 
-export interface Appointment {
-  id: number;
-  date: string;
-  time: string;
-  status: string;
-  notes?: string;
-  created_at?: string;
+// ── Slots / availability ──────────────────────────────────────────────────────
+
+export async function getSlots(
+  date: string,
+  doctorId?: number,
+  categoryId?: number,
+) {
+  const res = await api.get("/slots", {
+    params: {
+      date,
+      ...(doctorId !== undefined ? { doctor_id: doctorId } : {}),
+      ...(categoryId !== undefined ? { category_id: categoryId } : {}),
+    },
+  });
+  return res.data as {
+    date: string;
+    doctor_id: number | null;
+    category_id: number | null;
+    slots: string[];
+  };
 }
+
+export async function getMonthlyAvailability(
+  year: number,
+  month: number,
+  categoryId?: number,
+): Promise<Record<string, number>> {
+  const res = await api.get("/availability", {
+    params: {
+      year,
+      month,
+      ...(categoryId !== undefined ? { category_id: categoryId } : {}),
+    },
+  });
+  return res.data as Record<string, number>;
+}
+
+// ── Shared types ──────────────────────────────────────────────────────────────
 
 export interface Message {
   role: "user" | "assistant";
@@ -52,4 +134,5 @@ export interface CallSummary {
   follow_up_needed: boolean;
   sentiment: "positive" | "neutral" | "negative";
   call_duration_estimate?: string;
+  sheets_saved?: boolean;
 }

@@ -3,7 +3,6 @@ import {
   Room,
   RoomEvent,
   Track,
-  LocalParticipant,
   RemoteTrack,
   ConnectionState,
 } from "livekit-client";
@@ -18,13 +17,11 @@ export interface VoiceAgentState {
   toolEvents: ToolEvent[];
   callSummary: CallSummary | null;
   isMicMuted: boolean;
-  mouthOpenness: number; // 0–1 for avatar animation
+  mouthOpenness: number;
   startCall: () => Promise<void>;
   endCall: () => Promise<void>;
   toggleMic: () => void;
 }
-
-const ROOM_NAME = "mykare-health";
 
 export function useVoiceAgent(): VoiceAgentState {
   const roomRef = useRef<Room | null>(null);
@@ -40,22 +37,15 @@ export function useVoiceAgent(): VoiceAgentState {
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [mouthOpenness, setMouthOpenness] = useState(0);
 
-  // Animate avatar mouth from analyser data
   const startMouthAnimation = useCallback((track: RemoteTrack) => {
     const audioCtx = new AudioContext();
     audioCtxRef.current = audioCtx;
-
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
     analyserRef.current = analyser;
-
-    const source = audioCtx.createMediaStreamSource(
-      new MediaStream([track.mediaStreamTrack])
-    );
+    const source = audioCtx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
     source.connect(analyser);
-
     const data = new Uint8Array(analyser.frequencyBinCount);
-
     const tick = () => {
       analyser.getByteFrequencyData(data);
       const avg = data.slice(0, 32).reduce((a, b) => a + b, 0) / 32;
@@ -79,6 +69,8 @@ export function useVoiceAgent(): VoiceAgentState {
     setToolEvents([]);
     setCallSummary(null);
 
+    // Unique room per session prevents duplicate agent dispatch
+    const roomName = `mykare-${Date.now()}`;
     const room = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = room;
 
@@ -92,10 +84,14 @@ export function useVoiceAgent(): VoiceAgentState {
       try {
         const msg = JSON.parse(new TextDecoder().decode(payload));
         if (msg.type === "transcript") {
-          setTranscript((prev) => [...prev, { role: msg.role, content: msg.content, timestamp: msg.timestamp }]);
+          setTranscript(prev => [...prev, {
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+          }]);
           setAgentState(msg.role === "assistant" ? "speaking" : "listening");
         } else if (msg.type === "tool_event") {
-          setToolEvents((prev) => [...prev, msg as ToolEvent]);
+          setToolEvents(prev => [...prev, msg as ToolEvent]);
           if (msg.status === "calling") setAgentState("thinking");
           else setAgentState("connected");
         } else if (msg.type === "call_summary") {
@@ -103,7 +99,7 @@ export function useVoiceAgent(): VoiceAgentState {
           setAgentState("ended");
         }
       } catch {
-        // ignore malformed
+        // ignore malformed packets
       }
     });
 
@@ -123,7 +119,7 @@ export function useVoiceAgent(): VoiceAgentState {
 
     room.on(RoomEvent.ParticipantConnected, () => setAgentState("connected"));
 
-    const { token, livekit_url } = await getToken(ROOM_NAME);
+    const { token, livekit_url } = await getToken(roomName);
     await room.connect(livekit_url, token);
     await room.localParticipant.setMicrophoneEnabled(true);
     setAgentState("connected");
@@ -141,12 +137,11 @@ export function useVoiceAgent(): VoiceAgentState {
   const toggleMic = useCallback(() => {
     const room = roomRef.current;
     if (!room) return;
-    const enabled = !isMicMuted;
-    room.localParticipant.setMicrophoneEnabled(enabled);
-    setIsMicMuted(!enabled);
+    const nowMuted = !isMicMuted;
+    room.localParticipant.setMicrophoneEnabled(!nowMuted);
+    setIsMicMuted(nowMuted);
   }, [isMicMuted]);
 
-  // cleanup on unmount
   useEffect(() => {
     return () => {
       stopMouthAnimation();

@@ -3,53 +3,109 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
+
   body {
-    @apply bg-slate-950 text-slate-100 font-sans antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    @apply bg-slate-950 text-slate-100 antialiased;
+    font-family: 'DM Sans', system-ui, sans-serif;
   }
-  ::-webkit-scrollbar {
-    width: 4px;
+
+  /* Display font — used for headings, agent name, etc. */
+  .font-display {
+    font-family: 'Syne', system-ui, sans-serif;
   }
-  ::-webkit-scrollbar-track {
-    @apply bg-slate-900;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-slate-600 rounded-full;
-  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { @apply bg-slate-900; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-700 rounded-full; }
 }
 
 @layer components {
+  /* ── Cards ── */
   .card {
-    @apply bg-slate-900 border border-slate-800 rounded-xl;
+    @apply bg-slate-900 border border-slate-800 rounded-2xl;
   }
+  .card-inner {
+    @apply bg-slate-800/50 border border-slate-700/50 rounded-xl;
+  }
+
+  /* ── Buttons ── */
   .btn-primary {
-    @apply bg-teal-600 hover:bg-teal-500 text-white font-semibold py-3 px-6 rounded-xl
-           transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-teal-500 hover:bg-teal-400 text-white font-semibold py-3 px-6 rounded-xl
+           transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-lg shadow-teal-500/20 hover:shadow-teal-500/30;
   }
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-500 text-white font-semibold py-3 px-6 rounded-xl
-           transition-all duration-200 active:scale-95;
+    @apply bg-red-500/90 hover:bg-red-500 text-white font-semibold py-3 px-6 rounded-xl
+           transition-all duration-200 active:scale-95 shadow-lg shadow-red-500/20;
+  }
+  .btn-ghost {
+    @apply text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700
+           font-medium py-2.5 px-4 rounded-xl transition-all duration-200 active:scale-95;
+  }
+  .badge {
+    @apply text-xs font-medium px-2.5 py-1 rounded-full;
   }
 }
 
-/* Glow ring for avatar states */
-.glow-teal {
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.4), 0 0 24px rgba(20, 184, 166, 0.2);
+/* ── Glow rings ── */
+.glow-teal  { box-shadow: 0 0 0 2px rgba(20,184,166,0.5),  0 0 32px rgba(20,184,166,0.15); }
+.glow-blue  { box-shadow: 0 0 0 2px rgba(59,130,246,0.5),  0 0 32px rgba(59,130,246,0.15); }
+.glow-amber { box-shadow: 0 0 0 2px rgba(245,158,11,0.5),  0 0 32px rgba(245,158,11,0.15); }
+
+/* ── Soundwave bars ── */
+@keyframes soundwave {
+  0%, 100% { transform: scaleY(0.3); }
+  50%       { transform: scaleY(1); }
 }
-.glow-blue {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4), 0 0 24px rgba(59, 130, 246, 0.2);
+.soundwave-bar { animation: soundwave 0.8s ease-in-out infinite; }
+
+/* ── Landing orb pulse ── */
+@keyframes orb-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1);    opacity: 0.06; }
+  50%       { transform: translate(-50%, -50%) scale(1.1); opacity: 0.12; }
 }
-.glow-amber {
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4), 0 0 24px rgba(245, 158, 11, 0.2);
+.orb-pulse { animation: orb-pulse 4s ease-in-out infinite; }
+
+@keyframes orb-pulse-slow {
+  0%, 100% { opacity: 0.04; transform: scale(1);    }
+  50%       { opacity: 0.08; transform: scale(1.08); }
+}
+.orb-pulse-slow { animation: orb-pulse-slow 6s ease-in-out infinite; }
+
+/* ── CTA button ping ring ── */
+@keyframes ring-ping {
+  0%   { transform: scale(1);    opacity: 0.6; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+.ring-ping { animation: ring-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+/* ── Fade-in-up (landing hero stagger) ── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up    { animation: fade-up 0.5s ease both; }
+.fade-up-d1 { animation: fade-up 0.5s 0.10s ease both; }
+.fade-up-d2 { animation: fade-up 0.5s 0.20s ease both; }
+.fade-up-d3 { animation: fade-up 0.5s 0.30s ease both; }
+.fade-up-d4 { animation: fade-up 0.5s 0.45s ease both; }
+
+/* ── Summary modal slide-in ── */
+@keyframes slide-in {
+  from { opacity: 0; transform: scale(0.95) translateY(12px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+.slide-in { animation: slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* ── Calendar day cell hover glow ── */
+.cal-day-hover-teal:hover {
+  box-shadow: 0 0 0 1px rgba(20,184,166,0.35), 0 0 8px rgba(20,184,166,0.12);
 }
 
-@keyframes soundwave {
-  0%, 100% { transform: scaleY(0.4); }
-  50% { transform: scaleY(1); }
+/* ── Smooth slot panel reveal ── */
+@keyframes slot-reveal {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.soundwave-bar {
-  animation: soundwave 0.8s ease-in-out infinite;
-}
+.slot-reveal { animation: slot-reveal 0.2s ease both; }

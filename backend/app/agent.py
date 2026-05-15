@@ -13,7 +13,8 @@ from livekit.agents import (
     cli,
     function_tool,
 )
-from livekit.plugins import openai, cartesia, deepgram, silero
+from livekit.plugins import deepgram, silero
+from livekit.plugins import openai as openai_plugin
 
 from .config import settings
 from .database import init_db
@@ -22,30 +23,90 @@ from .summary import generate_call_summary
 
 logger = logging.getLogger("mykare.agent")
 
+_vad = silero.VAD.load()
+_AGENT_NAME = "mia"
+
+
+def _build_llm():
+    provider = settings.llm_provider.lower()
+    if provider == "gemini":
+        model = settings.llm_model or "gemini-2.0-flash"
+        logger.info(f"LLM: Gemini via OpenAI-compat ({model})")
+        return openai_plugin.LLM(
+            model=model,
+            api_key=settings.gemini_api_key or None,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+    model = settings.llm_model or "gpt-4o"
+    logger.info(f"LLM: OpenAI ({model})")
+    return openai_plugin.LLM(model=model, api_key=settings.openai_api_key or None)
+
+
 SYSTEM_PROMPT = """You are Mia, a warm and professional AI front-desk assistant for Mykare Health clinic.
-Your role is to help patients with appointment scheduling and management.
+Your role is to help patients schedule and manage appointments with our specialist doctors.
 
-WORKFLOW:
-1. Greet the patient and ask how you can help
-2. ALWAYS call identify_user first to get/register their phone number
-3. Based on intent, call the appropriate tools
-4. Confirm all details clearly before booking
-5. Call end_conversation when the patient is done
+OUR MEDICAL DEPARTMENTS & SPECIALISTS:
+1. General Medicine     — Dr. Priya Sharma         (Mon–Fri)
+2. Cardiology (Heart)   — Dr. Rajesh Nair           (Mon, Wed, Fri)
+3. Ophthalmology (Eyes) — Dr. Kavitha Menon         (Mon, Tue, Thu, Fri)
+4. Gastroenterology     — Dr. Meera Joshi           (Mon, Wed, Thu, Sat)
+5. Pediatrics (Children)— Dr. Sunita Rao            (Mon–Sat)
+6. Orthopedics          — Dr. Vikram Patel          (Mon, Wed, Thu)
+7. Dermatology (Skin)   — Dr. Ananya Bose           (Tue, Thu, Sat)
+8. ENT                  — Dr. Arun Gupta            (Tue, Wed, Fri)
+9. Neurology            — Dr. Kiran Reddy           (Mon, Thu, Fri)
+10. Gynecology          — Dr. Pooja Singh           (Mon–Fri)
 
-TOOLS TO USE:
-- identify_user: first thing — get patient's phone number
-- fetch_slots: when patient wants to see availability
-- book_appointment: after confirming date/time with patient
-- retrieve_appointments: to show existing bookings
-- cancel_appointment: when patient wants to cancel
-- modify_appointment: when patient wants to reschedule
-- end_conversation: to close the call and generate summary
+STRICT CONVERSATION FLOW — follow this order every time:
+1. Greet and introduce yourself as Mia from Mykare Health.
+2. Ask the patient for their EMAIL ADDRESS and PHONE NUMBER to register them.
+3. Call identify_user(phone_number, email) immediately — this registers/finds the patient.
+4. Ask what health concern or symptom brings them in today.
+   Guide them to one of our 10 departments using the examples below:
+   - "eyes / vision / sight" → Ophthalmology
+   - "heart / chest pain / blood pressure / palpitations" → Cardiology
+   - "stomach / digestion / acidity / ulcer / nausea" → Gastroenterology
+   - "child / baby / infant / kids" → Pediatrics
+   - "bones / joints / back pain / fracture / arthritis" → Orthopedics
+   - "skin / rash / acne / hair loss / eczema" → Dermatology
+   - "ear / nose / throat / sinus / tonsil / hearing" → ENT
+   - "brain / headache / migraine / seizure / vertigo / nerve" → Neurology
+   - "women / pregnancy / menstrual / periods / fertility" → Gynecology
+   - everything else → General Medicine
+5. Call fetch_doctors(specialization=<matched department>) to confirm the right doctor and their available days.
+6. Tell the patient which doctor handles that concern and on which days they are available.
+7. Ask the patient for their preferred date.
+8. Call fetch_slots(date=<YYYY-MM-DD>, doctor_id=<id>) to get available slots.
+9. Present at most 5 available time slots naturally (e.g., "9:00 AM, 10:00 AM, 11:00 AM…").
+10. If the patient requests a time that is NOT in fetch_slots results — say clearly:
+    "I'm sorry, that slot is not available. The open times are: [list again]."
+11. Once the patient selects a valid slot, CONFIRM all details aloud:
+    "I'll book [patient name] with [doctor name] on [date] at [time]. Shall I confirm?"
+12. Call book_appointment() ONLY after the patient says yes/confirm/go ahead.
+13. Read the confirmation back: "Booked! Your appointment with [doctor] is confirmed for [date] at [time]. Reference ID: #[id]."
+14. Ask if there is anything else you can help with.
+15. Call end_conversation() when the patient says goodbye.
+
+FOR CANCELLATION / RESCHEDULING:
+- Call retrieve_appointments() to show existing bookings with their IDs.
+- Call cancel_appointment(appointment_id) or modify_appointment(appointment_id, new_date, new_time) accordingly.
+- Always confirm the cancellation/change before executing.
+
+TOOL USAGE RULES:
+- identify_user: ALWAYS call first, pass BOTH phone_number and email
+- fetch_categories: use only if patient asks about available departments
+- fetch_doctors: after identifying the health concern, pass the specialization name
+- fetch_slots: MUST be called before presenting times to verify real-time availability
+- book_appointment: ONLY after explicit patient confirmation; include email and category_name
+- retrieve_appointments: to show the patient's existing bookings
+- cancel_appointment / modify_appointment: after retrieve_appointments gives the IDs
+- end_conversation: when patient says goodbye
 
 VOICE RULES:
-- Keep responses SHORT (1-3 sentences max) — this is voice, not text
-- Speak naturally and conversationally
-- Confirm key details (date, time) by repeating them back
-- Always be warm but efficient
+- Keep responses SHORT (1–3 sentences max) — this is voice, not text
+- Never read out long lists; pick the top 5 slots maximum
+- Speak naturally; use "AM" / "PM" not 24-hour format when speaking
+- Always repeat doctor name, date, and time before confirming a booking
 - Today's date: {current_date}"""
 
 
@@ -58,6 +119,7 @@ class HealthcareAgent(Agent):
         self.transcript: list[dict] = []
         self.booked_appointments: list[dict] = []
         self.user_id: str | None = None
+        self.user_email: str | None = None
 
     async def _emit(self, tool: str, status: str, data: dict | None = None) -> None:
         payload = json.dumps({
@@ -75,32 +137,73 @@ class HealthcareAgent(Agent):
     @function_tool
     async def identify_user(
         self,
-        phone_number: Annotated[str, "Patient phone number, digits only, e.g. 9876543210"],
+        phone_number: Annotated[str, "Patient's phone number, digits only, e.g. 9876543210"],
+        email: Annotated[str, "Patient's email address, e.g. john@gmail.com"] = "",
     ) -> str:
-        """Identify or register a patient by their phone number. Always call this first before any other action."""
-        await self._emit("identify_user", "calling", {"phone_number": phone_number})
-        result = await tool_funcs.identify_user(phone_number)
+        """Identify or register a patient by phone number and email. Always call this first."""
+        await self._emit("identify_user", "calling", {"phone_number": phone_number, "email": email})
+        result = await tool_funcs.identify_user(phone_number, email)
         self.user_id = phone_number
+        self.user_email = email or result.get("email") or ""
         await self._emit("identify_user", "success", result)
         if result["found"]:
             name = result["name"] or "there"
-            return f"Patient recognized: {name} (ID: {phone_number}). How can I help you today?"
-        return f"Welcome! New patient registered with ID {phone_number}. What's your name, and how can I help you?"
+            return f"Patient recognized: {name} (phone: {phone_number}, email: {result.get('email') or 'not on file'}). How can I help you today?"
+        return f"New patient registered — phone: {phone_number}, email: {email or 'not provided'}. May I have your full name please?"
+
+    @function_tool
+    async def fetch_categories(self) -> str:
+        """List all available medical departments. Use when the patient asks what specializations are available."""
+        await self._emit("fetch_categories", "calling", {})
+        categories = await tool_funcs.fetch_categories()
+        await self._emit("fetch_categories", "success", {"categories": categories})
+        lines = "; ".join(f"{c['icon']} {c['display_name']}" for c in categories)
+        return f"Our departments: {lines}. Which area applies to your concern?"
+
+    @function_tool
+    async def fetch_doctors(
+        self,
+        specialization: Annotated[
+            str,
+            "Department name to filter by, e.g. 'Cardiology', 'Ophthalmology', 'General Medicine'. "
+            "Pass the closest matching department name.",
+        ] = "",
+    ) -> str:
+        """Fetch available doctors, filtered by specialization/department."""
+        await self._emit("fetch_doctors", "calling", {"specialization": specialization})
+        doctors = await tool_funcs.fetch_doctors(specialization or None)
+        await self._emit("fetch_doctors", "success", {"doctors": doctors})
+        if not doctors:
+            return f"No doctors found for '{specialization}'. Try 'General Medicine' or ask the patient to clarify."
+        lines = "; ".join(
+            f"{d['name']} ({d['specialization']}, available {', '.join(d['available_days'][:3])}"
+            f"{'…' if len(d['available_days']) > 3 else ''})"
+            for d in doctors
+        )
+        return f"Doctor(s) for {specialization}: {lines}. Ask the patient for their preferred date."
 
     @function_tool
     async def fetch_slots(
         self,
         date: Annotated[str, "Date in YYYY-MM-DD format"],
+        doctor_id: Annotated[
+            int,
+            "Doctor ID from fetch_doctors result. Use 0 only if no specific doctor.",
+        ] = 0,
     ) -> str:
-        """Fetch available appointment slots for a given date."""
-        await self._emit("fetch_slots", "calling", {"date": date})
-        slots = await tool_funcs.fetch_slots(date)
+        """Fetch available appointment slots for a specific doctor on a given date."""
+        await self._emit("fetch_slots", "calling", {"date": date, "doctor_id": doctor_id})
+        slots = await tool_funcs.fetch_slots(date, doctor_id or None)
         await self._emit("fetch_slots", "success", {"date": date, "available_slots": slots})
         if not slots:
-            return f"No available slots on {date}. Would you like to try another date?"
-        readable = ", ".join(slots[:6])
+            return f"No slots available on {date} for that doctor. Ask the patient to try another date."
+        # Convert HH:MM to readable AM/PM for voice
+        def to_ampm(t: str) -> str:
+            h, m = map(int, t.split(":"))
+            return f"{h % 12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
+        readable = ", ".join(to_ampm(s) for s in slots[:6])
         more = f" and {len(slots) - 6} more" if len(slots) > 6 else ""
-        return f"Available times on {date}: {readable}{more}. Which works for you?"
+        return f"Available times on {date}: {readable}{more}. Which time works best?"
 
     @function_tool
     async def book_appointment(
@@ -108,38 +211,68 @@ class HealthcareAgent(Agent):
         name: Annotated[str, "Patient's full name"],
         phone_number: Annotated[str, "Patient's phone number"],
         date: Annotated[str, "Appointment date in YYYY-MM-DD format"],
-        time: Annotated[str, "Appointment time in HH:MM 24-hour format"],
+        time: Annotated[str, "Appointment time in HH:MM 24-hour format, e.g. 10:30"],
+        doctor_id: Annotated[int, "Doctor ID from fetch_doctors. Use 0 if not specified."] = 0,
+        doctor_name: Annotated[str, "Doctor's full name, e.g. Dr. Rajesh Nair"] = "",
+        email: Annotated[str, "Patient's email address"] = "",
+        category_name: Annotated[
+            str,
+            "Medical department, e.g. 'Cardiology', 'Ophthalmology'. Leave blank if unknown.",
+        ] = "",
         notes: Annotated[str, "Reason for visit or special notes"] = "",
     ) -> str:
-        """Book an appointment for the patient after confirming all details."""
+        """Book an appointment after the patient has confirmed all details."""
         uid = self.user_id or phone_number
-        await self._emit("book_appointment", "calling", {"name": name, "date": date, "time": time})
-        result = await tool_funcs.book_appointment(uid, name, phone_number, date, time, notes)
+        uemail = email or self.user_email or ""
+        await self._emit("book_appointment", "calling", {
+            "name": name, "date": date, "time": time,
+            "doctor_name": doctor_name, "category_name": category_name,
+        })
+        result = await tool_funcs.book_appointment(
+            uid, name, phone_number, date, time,
+            email=uemail,
+            notes=notes,
+            doctor_id=doctor_id or None,
+            doctor_name=doctor_name or None,
+            category_name=category_name or None,
+        )
         if result["success"]:
             self.booked_appointments.append(result)
             await self._emit("book_appointment", "success", result)
-            return f"Booked! {name}, your appointment is confirmed for {date} at {time}. Confirmation ID: {result['appointment_id']}."
+            doc_part = f" with {doctor_name}" if doctor_name else ""
+            cat_part = f" ({category_name})" if category_name else ""
+            return (
+                f"Booked! {name}, your appointment{doc_part}{cat_part} is confirmed "
+                f"for {date} at {time}. Reference ID: #{result['appointment_id']}."
+            )
         await self._emit("book_appointment", "error", result)
-        return f"Sorry, {result['error']} Shall I check other available times?"
+        return f"Sorry, {result['error']} Please choose one of the available times."
 
     @function_tool
     async def retrieve_appointments(self) -> str:
         """Retrieve all appointments for the current patient."""
         if not self.user_id:
-            return "Let me get your phone number first to look up your appointments."
+            return "Let me get your phone number first."
         await self._emit("retrieve_appointments", "calling", {"user_id": self.user_id})
         appts = await tool_funcs.retrieve_appointments(self.user_id)
         await self._emit("retrieve_appointments", "success", {"appointments": appts})
         if not appts:
             return "You have no appointments on record. Would you like to book one?"
         confirmed = [a for a in appts if a["status"] == "confirmed"]
-        lines = "; ".join(f"{a['date']} at {a['time']}" for a in confirmed[:3])
+        if not confirmed:
+            return "All your previous appointments have been cancelled."
+        lines = "; ".join(
+            f"#{a['id']} — {a['date']} at {a['time']}"
+            + (f" with {a['doctor_name']}" if a.get("doctor_name") else "")
+            + (f" ({a['category_name']})" if a.get("category_name") else "")
+            for a in confirmed[:3]
+        )
         return f"You have {len(confirmed)} upcoming appointment(s): {lines}."
 
     @function_tool
     async def cancel_appointment(
         self,
-        appointment_id: Annotated[int, "The numeric appointment ID to cancel"],
+        appointment_id: Annotated[int, "The numeric appointment ID shown in retrieve_appointments"],
     ) -> str:
         """Cancel an existing appointment by its ID."""
         if not self.user_id:
@@ -163,16 +296,27 @@ class HealthcareAgent(Agent):
         await self._emit("modify_appointment", "calling", {
             "appointment_id": appointment_id, "new_date": new_date, "new_time": new_time,
         })
-        result = await tool_funcs.modify_appointment(appointment_id, self.user_id, new_date, new_time)
+        result = await tool_funcs.modify_appointment(
+            appointment_id, self.user_id, new_date, new_time
+        )
         status = "success" if result["success"] else "error"
         await self._emit("modify_appointment", status, result)
         return result.get("message") or result.get("error", "An error occurred.")
 
     @function_tool
     async def end_conversation(self) -> str:
-        """End the conversation and generate a call summary. Call this when the patient says goodbye or has no more requests."""
+        """End the conversation and generate a call summary. Call when the patient says goodbye."""
         await self._emit("end_conversation", "calling", {})
         summary = await generate_call_summary(self.transcript, self.booked_appointments)
+
+        sheets_saved = False
+        if settings.google_sheet_id and settings.google_service_account_json:
+            from .sheets import save_summary
+            sheets_saved = await save_summary(
+                summary, settings.google_sheet_id, settings.google_service_account_json
+            )
+        summary["sheets_saved"] = sheets_saved
+
         await self._emit("end_conversation", "success", summary)
         try:
             await self.session.room.local_participant.publish_data(
@@ -185,20 +329,22 @@ class HealthcareAgent(Agent):
             )
         except Exception as e:
             logger.warning(f"Failed to publish summary: {e}")
-        return "It was lovely speaking with you! Your details are all saved. Take care and have a wonderful day!"
+        return (
+            "It was a pleasure helping you today! Your appointment details are all saved. "
+            "Take care and have a wonderful day!"
+        )
 
 
 async def entrypoint(ctx: JobContext) -> None:
     await init_db()
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
-
     logger.info(f"Room connected: {ctx.room.name}")
 
     session = AgentSession(
         stt=deepgram.STT(api_key=settings.deepgram_api_key, language="en-US"),
-        llm=openai.LLM(model="gpt-4o", api_key=settings.openai_api_key),
-        tts=cartesia.TTS(api_key=settings.cartesia_api_key),
-        vad=silero.VAD.load(),
+        llm=_build_llm(),
+        tts=deepgram.TTS(api_key=settings.deepgram_api_key),
+        vad=_vad,
     )
 
     agent = HealthcareAgent()
@@ -223,9 +369,9 @@ async def entrypoint(ctx: JobContext) -> None:
     await session.start(room=ctx.room, agent=agent)
 
     await session.say(
-        "Hello! I'm Mia, your AI assistant at Mykare Health. "
-        "I can help you book, manage, or cancel appointments. "
-        "May I start by getting your phone number?",
+        "Hello! Welcome to Mykare Health. I'm Mia, your AI front-desk assistant. "
+        "I'm here to help you book appointments with our specialist doctors. "
+        "To get started, could you please share your email address and phone number?",
         allow_interruptions=True,
     )
 
@@ -234,6 +380,7 @@ def run_worker() -> None:
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            agent_name=_AGENT_NAME,
             api_key=settings.livekit_api_key,
             api_secret=settings.livekit_api_secret,
             ws_url=settings.livekit_url,

@@ -297,7 +297,7 @@ cp .env.example .env   # fill in keys
 uvicorn app.main:app --reload --port 8000
 
 # Terminal 2 — Agent worker
-python -m app.agent
+python -m app.agent dev
 ```
 
 **Frontend:**

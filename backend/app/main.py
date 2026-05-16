@@ -1,3 +1,4 @@
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -15,7 +16,7 @@ _dispatched_rooms: dict[str, float] = {}
 _DISPATCH_TTL = 3600
 
 from .config import settings
-from .database import init_db, get_session, Appointment, Category, Doctor, User
+from .database import init_db, get_session, Appointment, CallSession, Category, Doctor, User
 from .models import AppointmentCreate, TokenRequest, TokenResponse, SummaryRequest
 from .summary import generate_call_summary
 
@@ -260,6 +261,35 @@ async def get_monthly_availability(
 @app.post("/summary")
 async def create_summary(data: SummaryRequest):
     return await generate_call_summary(data.transcript, data.appointments)
+
+
+# ── Call sessions (history) ───────────────────────────────────────────────────
+
+@app.get("/sessions")
+async def list_sessions(
+    limit: int = 50,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(CallSession).order_by(CallSession.created_at.desc()).limit(limit)
+    )
+    sessions = result.scalars().all()
+    return [
+        {
+            "id": cs.id,
+            "room_name": cs.room_name,
+            "phone_number": cs.phone_number,
+            "user_name": cs.user_name,
+            "intent": cs.intent,
+            "sentiment": cs.sentiment,
+            "summary_text": cs.summary_text,
+            "summary_json": json.loads(cs.summary_json) if cs.summary_json else None,
+            "tokens_total": cs.tokens_total,
+            "cost_usd": cs.cost_usd,
+            "created_at": cs.created_at.isoformat() if cs.created_at else None,
+        }
+        for cs in sessions
+    ]
 
 
 # ── AWS Lambda adapter ────────────────────────────────────────────────────────

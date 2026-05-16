@@ -4,6 +4,7 @@ import logging
 from typing import Annotated
 from datetime import datetime
 
+from livekit import rtc
 from livekit.agents import (
     Agent,
     AgentSession,
@@ -13,6 +14,7 @@ from livekit.agents import (
     cli,
     function_tool,
 )
+from livekit.agents.metrics import LLMModelUsage
 from livekit.plugins import deepgram, silero
 from livekit.plugins import openai as openai_plugin
 
@@ -110,29 +112,68 @@ VOICE RULES:
 - Today's date: {current_date}"""
 
 
+_PRICING: dict[str, tuple[float, float]] = {
+    "gemini-2.0-flash":  (0.10,  0.40),
+    "gemini-1.5-flash":  (0.075, 0.30),
+    "gemini-1.5-pro":    (1.25,  5.00),
+    "gpt-4o":            (2.50, 10.00),
+    "gpt-4o-mini":       (0.15,  0.60),
+    "gpt-4-turbo":      (10.00, 30.00),
+}
+
+
 class HealthcareAgent(Agent):
-    def __init__(self) -> None:
+    def __init__(self, room: rtc.Room) -> None:
         current_date = datetime.now().strftime("%Y-%m-%d (%A)")
-        super().__init__(
-            instructions=SYSTEM_PROMPT.format(current_date=current_date)
-        )
+        super().__init__(instructions=SYSTEM_PROMPT.format(current_date=current_date))
+        # Store room directly — self.session.room does NOT exist in livekit-agents 1.x
+        self._room = room
         self.transcript: list[dict] = []
         self.booked_appointments: list[dict] = []
         self.user_id: str | None = None
         self.user_email: str | None = None
+        self._input_tokens = 0
+        self._output_tokens = 0
+
+    # ── Token tracking ────────────────────────────────────────────────────────
+
+    def _on_session_usage(self, ev) -> None:
+        """Handle session_usage_updated — the correct token event in livekit-agents 1.5.x."""
+        try:
+            for mu in ev.usage.model_usage:
+                if isinstance(mu, LLMModelUsage):
+                    self._input_tokens += mu.input_tokens
+                    self._output_tokens += mu.output_tokens
+        except Exception:
+            pass
+
+    def _cost_usd(self) -> float:
+        model = settings.llm_model or (
+            "gemini-2.0-flash" if settings.llm_provider == "gemini" else "gpt-4o"
+        )
+        in_p, out_p = _PRICING.get(model.lower(), (2.50, 10.00))
+        return round((self._input_tokens * in_p + self._output_tokens * out_p) / 1_000_000, 6)
+
+    # ── Data channel helpers ──────────────────────────────────────────────────
+
+    async def _pub(self, data: dict) -> None:
+        try:
+            await self._room.local_participant.publish_data(
+                json.dumps(data).encode(), reliable=True
+            )
+        except Exception as e:
+            logger.warning(f"publish_data failed: {e}")
 
     async def _emit(self, tool: str, status: str, data: dict | None = None) -> None:
-        payload = json.dumps({
+        await self._pub({
             "type": "tool_event",
             "tool": tool,
             "status": status,
             "data": data or {},
             "timestamp": datetime.now().isoformat(),
-        }).encode()
-        try:
-            await self.session.room.local_participant.publish_data(payload, reliable=True)
-        except Exception as e:
-            logger.warning(f"Failed to publish tool event: {e}")
+        })
+
+    # ── Tools ─────────────────────────────────────────────────────────────────
 
     @function_tool
     async def identify_user(
@@ -153,7 +194,7 @@ class HealthcareAgent(Agent):
 
     @function_tool
     async def fetch_categories(self) -> str:
-        """List all available medical departments. Use when the patient asks what specializations are available."""
+        """List all available medical departments."""
         await self._emit("fetch_categories", "calling", {})
         categories = await tool_funcs.fetch_categories()
         await self._emit("fetch_categories", "success", {"categories": categories})
@@ -163,18 +204,14 @@ class HealthcareAgent(Agent):
     @function_tool
     async def fetch_doctors(
         self,
-        specialization: Annotated[
-            str,
-            "Department name to filter by, e.g. 'Cardiology', 'Ophthalmology', 'General Medicine'. "
-            "Pass the closest matching department name.",
-        ] = "",
+        specialization: Annotated[str, "Department name, e.g. 'Cardiology', 'Ophthalmology'."] = "",
     ) -> str:
-        """Fetch available doctors, filtered by specialization/department."""
+        """Fetch available doctors filtered by specialization."""
         await self._emit("fetch_doctors", "calling", {"specialization": specialization})
         doctors = await tool_funcs.fetch_doctors(specialization or None)
         await self._emit("fetch_doctors", "success", {"doctors": doctors})
         if not doctors:
-            return f"No doctors found for '{specialization}'. Try 'General Medicine' or ask the patient to clarify."
+            return f"No doctors found for '{specialization}'. Try 'General Medicine'."
         lines = "; ".join(
             f"{d['name']} ({d['specialization']}, available {', '.join(d['available_days'][:3])}"
             f"{'…' if len(d['available_days']) > 3 else ''})"
@@ -186,18 +223,14 @@ class HealthcareAgent(Agent):
     async def fetch_slots(
         self,
         date: Annotated[str, "Date in YYYY-MM-DD format"],
-        doctor_id: Annotated[
-            int,
-            "Doctor ID from fetch_doctors result. Use 0 only if no specific doctor.",
-        ] = 0,
+        doctor_id: Annotated[int, "Doctor ID from fetch_doctors. Use 0 if unknown."] = 0,
     ) -> str:
         """Fetch available appointment slots for a specific doctor on a given date."""
         await self._emit("fetch_slots", "calling", {"date": date, "doctor_id": doctor_id})
         slots = await tool_funcs.fetch_slots(date, doctor_id or None)
         await self._emit("fetch_slots", "success", {"date": date, "available_slots": slots})
         if not slots:
-            return f"No slots available on {date} for that doctor. Ask the patient to try another date."
-        # Convert HH:MM to readable AM/PM for voice
+            return f"No slots available on {date}. Ask the patient to try another date."
         def to_ampm(t: str) -> str:
             h, m = map(int, t.split(":"))
             return f"{h % 12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
@@ -213,12 +246,9 @@ class HealthcareAgent(Agent):
         date: Annotated[str, "Appointment date in YYYY-MM-DD format"],
         time: Annotated[str, "Appointment time in HH:MM 24-hour format, e.g. 10:30"],
         doctor_id: Annotated[int, "Doctor ID from fetch_doctors. Use 0 if not specified."] = 0,
-        doctor_name: Annotated[str, "Doctor's full name, e.g. Dr. Rajesh Nair"] = "",
+        doctor_name: Annotated[str, "Doctor's full name"] = "",
         email: Annotated[str, "Patient's email address"] = "",
-        category_name: Annotated[
-            str,
-            "Medical department, e.g. 'Cardiology', 'Ophthalmology'. Leave blank if unknown.",
-        ] = "",
+        category_name: Annotated[str, "Medical department, e.g. 'Cardiology'"] = "",
         notes: Annotated[str, "Reason for visit or special notes"] = "",
     ) -> str:
         """Book an appointment after the patient has confirmed all details."""
@@ -230,8 +260,7 @@ class HealthcareAgent(Agent):
         })
         result = await tool_funcs.book_appointment(
             uid, name, phone_number, date, time,
-            email=uemail,
-            notes=notes,
+            email=uemail, notes=notes,
             doctor_id=doctor_id or None,
             doctor_name=doctor_name or None,
             category_name=category_name or None,
@@ -272,7 +301,7 @@ class HealthcareAgent(Agent):
     @function_tool
     async def cancel_appointment(
         self,
-        appointment_id: Annotated[int, "The numeric appointment ID shown in retrieve_appointments"],
+        appointment_id: Annotated[int, "The numeric appointment ID from retrieve_appointments"],
     ) -> str:
         """Cancel an existing appointment by its ID."""
         if not self.user_id:
@@ -309,6 +338,23 @@ class HealthcareAgent(Agent):
         await self._emit("end_conversation", "calling", {})
         summary = await generate_call_summary(self.transcript, self.booked_appointments)
 
+        # Merge summary-generation tokens
+        st = summary.pop("_summary_tokens", {})
+        self._input_tokens  += st.get("prompt_tokens", 0)
+        self._output_tokens += st.get("completion_tokens", 0)
+
+        model = settings.llm_model or (
+            "gemini-2.0-flash" if settings.llm_provider == "gemini" else "gpt-4o"
+        )
+        summary["tokens_used"] = {
+            "prompt_tokens":    self._input_tokens,
+            "completion_tokens": self._output_tokens,
+            "total_tokens":     self._input_tokens + self._output_tokens,
+        }
+        summary["estimated_cost_usd"] = self._cost_usd()
+        summary["model"]    = model
+        summary["provider"] = settings.llm_provider
+
         sheets_saved = False
         if settings.google_sheet_id and settings.google_service_account_json:
             from .sheets import save_summary
@@ -317,18 +363,18 @@ class HealthcareAgent(Agent):
             )
         summary["sheets_saved"] = sheets_saved
 
-        await self._emit("end_conversation", "success", summary)
+        # Save to call history DB
         try:
-            await self.session.room.local_participant.publish_data(
-                json.dumps({
-                    "type": "call_summary",
-                    "summary": summary,
-                    "timestamp": datetime.now().isoformat(),
-                }).encode(),
-                reliable=True,
-            )
+            await tool_funcs.save_call_session(self._room.name, summary)
         except Exception as e:
-            logger.warning(f"Failed to publish summary: {e}")
+            logger.warning(f"Failed to save call session: {e}")
+
+        await self._emit("end_conversation", "success", summary)
+        await self._pub({
+            "type": "call_summary",
+            "summary": summary,
+            "timestamp": datetime.now().isoformat(),
+        })
         return (
             "It was a pleasure helping you today! Your appointment details are all saved. "
             "Take care and have a wonderful day!"
@@ -347,33 +393,52 @@ async def entrypoint(ctx: JobContext) -> None:
         vad=_vad,
     )
 
-    agent = HealthcareAgent()
+    # Pass ctx.room directly — avoids the broken self.session.room pattern
+    agent = HealthcareAgent(ctx.room)
 
+    # Token tracking via the correct 1.5.x event
+    session.on("session_usage_updated", agent._on_session_usage)
+
+    # User speech → transcript
     @session.on("user_input_transcribed")
     def on_user_input(ev) -> None:
-        if getattr(ev, "is_final", True):
-            content = getattr(ev, "transcript", str(ev))
-            agent.transcript.append({"role": "user", "content": content})
-            asyncio.ensure_future(
-                ctx.room.local_participant.publish_data(
-                    json.dumps({
-                        "type": "transcript",
-                        "role": "user",
-                        "content": content,
-                        "timestamp": datetime.now().isoformat(),
-                    }).encode(),
-                    reliable=True,
-                )
-            )
+        if ev.is_final:
+            agent.transcript.append({"role": "user", "content": ev.transcript})
+            asyncio.ensure_future(agent._pub({
+                "type": "transcript", "role": "user",
+                "content": ev.transcript, "timestamp": datetime.now().isoformat(),
+            }))
+
+    # Agent speech → transcript (conversation_item_added fires for every LLM output)
+    @session.on("conversation_item_added")
+    def on_item_added(ev) -> None:
+        try:
+            item = ev.item
+            if getattr(item, "role", None) == "assistant":
+                text = item.text_content  # @property on ChatMessage
+                if text:
+                    agent.transcript.append({"role": "assistant", "content": text})
+                    asyncio.ensure_future(agent._pub({
+                        "type": "transcript", "role": "assistant",
+                        "content": text, "timestamp": datetime.now().isoformat(),
+                    }))
+        except Exception:
+            pass
 
     await session.start(room=ctx.room, agent=agent)
 
-    await session.say(
+    GREETING = (
         "Hello! Welcome to Mykare Health. I'm Mia, your AI front-desk assistant. "
         "I'm here to help you book appointments with our specialist doctors. "
-        "To get started, could you please share your email address and phone number?",
-        allow_interruptions=True,
+        "To get started, could you please share your email address and phone number?"
     )
+    await session.say(GREETING, allow_interruptions=True)
+    # Publish greeting manually since session.say() bypasses the LLM pipeline
+    agent.transcript.append({"role": "assistant", "content": GREETING})
+    asyncio.ensure_future(agent._pub({
+        "type": "transcript", "role": "assistant",
+        "content": GREETING, "timestamp": datetime.now().isoformat(),
+    }))
 
 
 def run_worker() -> None:

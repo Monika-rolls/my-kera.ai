@@ -58,7 +58,13 @@ Return ONLY valid JSON with these exact keys:
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],
         )
-        return json.loads(response.choices[0].message.content)
+        result = json.loads(response.choices[0].message.content)
+        if response.usage:
+            result["_summary_tokens"] = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+            }
+        return result
     except Exception:
         return {
             "summary": "Call completed. See appointments list for details.",

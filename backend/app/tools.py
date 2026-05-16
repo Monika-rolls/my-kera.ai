@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from sqlalchemy import select
 
-from .database import Appointment, Category, Doctor, User, AsyncSessionLocal
+from .database import Appointment, CallSession, Category, Doctor, User, AsyncSessionLocal
 
 
 async def identify_user(phone_number: str, email: str = "", name: str = "") -> dict:
@@ -262,3 +262,25 @@ async def modify_appointment(
             "success": True,
             "message": f"Appointment rescheduled to {new_date} at {new_time}.",
         }
+
+
+async def save_call_session(room_name: str, summary: dict) -> int:
+    tokens_used = summary.get("tokens_used") or {}
+    tokens_total = tokens_used.get("total_tokens") if tokens_used else None
+
+    async with AsyncSessionLocal() as session:
+        cs = CallSession(
+            room_name=room_name,
+            phone_number=summary.get("phone_number"),
+            user_name=summary.get("user_name"),
+            intent=summary.get("intent", "unknown"),
+            sentiment=summary.get("sentiment", "neutral"),
+            summary_text=summary.get("summary"),
+            summary_json=json.dumps(summary),
+            tokens_total=tokens_total,
+            cost_usd=summary.get("estimated_cost_usd"),
+        )
+        session.add(cs)
+        await session.commit()
+        await session.refresh(cs)
+        return cs.id

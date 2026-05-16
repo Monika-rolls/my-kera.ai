@@ -1,7 +1,7 @@
 import json
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, DateTime, Integer, func, select, text
+from sqlalchemy import String, DateTime, Integer, Float, Text, func, select, text
 from datetime import datetime
 from typing import AsyncGenerator
 
@@ -51,6 +51,22 @@ class User(Base):
     phone_number: Mapped[str] = mapped_column(String(20), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(200), nullable=True)
     name: Mapped[str] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CallSession(Base):
+    __tablename__ = "call_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    room_name: Mapped[str] = mapped_column(String(200), index=True)
+    phone_number: Mapped[str] = mapped_column(String(20), nullable=True)
+    user_name: Mapped[str] = mapped_column(String(100), nullable=True)
+    intent: Mapped[str] = mapped_column(String(50), default="unknown")
+    sentiment: Mapped[str] = mapped_column(String(20), default="neutral")
+    summary_text: Mapped[str] = mapped_column(Text, nullable=True)
+    summary_json: Mapped[str] = mapped_column(Text, nullable=True)
+    tokens_total: Mapped[int] = mapped_column(Integer, nullable=True)
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

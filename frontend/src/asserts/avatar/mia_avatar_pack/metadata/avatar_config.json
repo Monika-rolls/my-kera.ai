@@ -1,0 +1,32 @@
+{
+  "name": "Mia",
+  "style": "Google/Android Studio inspired",
+  "states": [
+    "idle.svg",
+    "listening.svg",
+    "thinking.svg",
+    "speaking.svg",
+    "happy.svg",
+    "concern.svg",
+    "goodbye.svg"
+  ],
+  "mouth_shapes": [
+    "closed",
+    "small",
+    "open",
+    "wide"
+  ],
+  "eye_states": [
+    "open",
+    "half",
+    "closed"
+  ],
+  "gestures": [
+    "wave",
+    "point_calendar",
+    "typing",
+    "namaste"
+  ],
+  "recommended_renderer": "SVG + Canvas",
+  "fps_target": 60
+}

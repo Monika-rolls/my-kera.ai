@@ -1,0 +1,20 @@
+<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Left eye open part -->
+  <ellipse cx="76" cy="95" rx="17" ry="13" fill="white"/>
+  <circle cx="76" cy="95" r="9" fill="#0891B2"/>
+  <circle cx="76" cy="95" r="5.5" fill="#0F172A"/>
+  <circle cx="79" cy="91" r="2.5" fill="white" opacity="0.9"/>
+  <!-- Left lower eyelid overlay (skin = closed look) -->
+  <path d="M 59,95 Q 76,107 93,95 Q 76,110 59,95 Z" fill="#FDDBB4"/>
+  <path d="M 59,95 Q 76,83 93,95" stroke="#1C1C2E" stroke-width="2" fill="none"/>
+  <path d="M 59,95 Q 76,107 93,95" stroke="#1C1C2E" stroke-width="1.5" fill="none"/>
+  <!-- Right eye open part -->
+  <ellipse cx="124" cy="95" rx="17" ry="13" fill="white"/>
+  <circle cx="124" cy="95" r="9" fill="#0891B2"/>
+  <circle cx="124" cy="95" r="5.5" fill="#0F172A"/>
+  <circle cx="127" cy="91" r="2.5" fill="white" opacity="0.9"/>
+  <!-- Right lower eyelid overlay -->
+  <path d="M 107,95 Q 124,107 141,95 Q 124,110 107,95 Z" fill="#FDDBB4"/>
+  <path d="M 107,95 Q 124,83 141,95" stroke="#1C1C2E" stroke-width="2" fill="none"/>
+  <path d="M 107,95 Q 124,107 141,95" stroke="#1C1C2E" stroke-width="1.5" fill="none"/>
+</svg>

@@ -1,0 +1,25 @@
+<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Left arm -->
+  <path d="M 14,240 Q 26,216 46,200" stroke="#FDDBB4" stroke-width="24" fill="none" stroke-linecap="round"/>
+  <!-- Left hand -->
+  <ellipse cx="50" cy="194" rx="19" ry="13" fill="#FDDBB4" transform="rotate(20,50,194)"/>
+  <ellipse cx="48" cy="188" rx="13" ry="8" fill="#EAB989" opacity="0.65"/>
+  <!-- Left fingers -->
+  <path d="M 42,185 Q 40,176 43,170" stroke="#FDDBB4" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 51,182 Q 50,172 52,166" stroke="#FDDBB4" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- Right arm -->
+  <path d="M 186,240 Q 174,216 154,200" stroke="#FDDBB4" stroke-width="24" fill="none" stroke-linecap="round"/>
+  <!-- Right hand -->
+  <ellipse cx="150" cy="194" rx="19" ry="13" fill="#FDDBB4" transform="rotate(-20,150,194)"/>
+  <ellipse cx="152" cy="188" rx="13" ry="8" fill="#EAB989" opacity="0.65"/>
+  <!-- Right fingers -->
+  <path d="M 158,185 Q 160,176 157,170" stroke="#FDDBB4" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 149,182 Q 150,172 148,166" stroke="#FDDBB4" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- Keyboard hint -->
+  <rect x="55" y="218" width="90" height="18" rx="4" fill="#1C2B3A" opacity="0.4"/>
+  <rect x="60" y="222" width="12" height="6" rx="2" fill="#0D9488" opacity="0.5"/>
+  <rect x="76" y="222" width="12" height="6" rx="2" fill="#0D9488" opacity="0.5"/>
+  <rect x="92" y="222" width="12" height="6" rx="2" fill="#0D9488" opacity="0.5"/>
+  <rect x="108" y="222" width="12" height="6" rx="2" fill="#0D9488" opacity="0.5"/>
+  <rect x="124" y="222" width="12" height="6" rx="2" fill="#0D9488" opacity="0.5"/>
+</svg>

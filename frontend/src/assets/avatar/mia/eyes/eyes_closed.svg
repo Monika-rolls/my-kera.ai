@@ -1,0 +1,12 @@
+<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Left closed lid -->
+  <path d="M 59,95 Q 76,107 93,95" stroke="#1C1C2E" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <line x1="67" y1="97" x2="63" y2="102" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="76" y1="99" x2="76" y2="105" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="85" y1="97" x2="89" y2="102" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Right closed lid -->
+  <path d="M 107,95 Q 124,107 141,95" stroke="#1C1C2E" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <line x1="115" y1="97" x2="111" y2="102" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="124" y1="99" x2="124" y2="105" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="133" y1="97" x2="137" y2="102" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

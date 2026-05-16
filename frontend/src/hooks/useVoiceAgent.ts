@@ -6,7 +6,8 @@ import {
   RemoteTrack,
   ConnectionState,
 } from "livekit-client";
-import { getToken, type Message, type ToolEvent, type CallSummary } from "../lib/api";
+import { getToken, postSummary, type Message, type ToolEvent, type CallSummary } from "../lib/api";
+import type { AvatarDataEvent } from "../components/avatar/avatarConfig";
 
 export type AgentState = "idle" | "connecting" | "connected" | "speaking" | "listening" | "thinking" | "ended";
 
@@ -18,6 +19,7 @@ export interface VoiceAgentState {
   callSummary: CallSummary | null;
   isMicMuted: boolean;
   mouthOpenness: number;
+  avatarEvent: AvatarDataEvent | null;
   startCall: () => Promise<void>;
   endCall: () => Promise<void>;
   toggleMic: () => void;
@@ -36,6 +38,15 @@ export function useVoiceAgent(): VoiceAgentState {
   const [callSummary, setCallSummary] = useState<CallSummary | null>(null);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [mouthOpenness, setMouthOpenness] = useState(0);
+  const [avatarEvent, setAvatarEvent] = useState<AvatarDataEvent | null>(null);
+
+  // Refs so endCall can read latest state without stale closure
+  const transcriptRef = useRef<Message[]>([]);
+  const toolEventsRef = useRef<ToolEvent[]>([]);
+  const callSummaryRef = useRef<CallSummary | null>(null);
+  useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+  useEffect(() => { toolEventsRef.current = toolEvents; }, [toolEvents]);
+  useEffect(() => { callSummaryRef.current = callSummary; }, [callSummary]);
 
   const startMouthAnimation = useCallback((track: RemoteTrack) => {
     const audioCtx = new AudioContext();
@@ -97,6 +108,8 @@ export function useVoiceAgent(): VoiceAgentState {
         } else if (msg.type === "call_summary") {
           setCallSummary(msg.summary as CallSummary);
           setAgentState("ended");
+        } else if (msg.type === "avatar_state") {
+          setAvatarEvent(msg as AvatarDataEvent);
         }
       } catch {
         // ignore malformed packets
@@ -132,6 +145,19 @@ export function useVoiceAgent(): VoiceAgentState {
       roomRef.current = null;
     }
     setAgentState("ended");
+
+    // If the agent never sent a call_summary (user hung up early), generate one now
+    if (!callSummaryRef.current && transcriptRef.current.length > 0) {
+      try {
+        const bookedAppts = toolEventsRef.current
+          .filter(e => e.tool === "book_appointment" && e.status === "success")
+          .map(e => e.data);
+        const summary = await postSummary(transcriptRef.current, bookedAppts);
+        setCallSummary(summary);
+      } catch {
+        // Non-fatal: user can still read the transcript
+      }
+    }
   }, [stopMouthAnimation]);
 
   const toggleMic = useCallback(() => {
@@ -157,6 +183,7 @@ export function useVoiceAgent(): VoiceAgentState {
     callSummary,
     isMicMuted,
     mouthOpenness,
+    avatarEvent,
     startCall,
     endCall,
     toggleMic,

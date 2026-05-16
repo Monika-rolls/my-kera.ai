@@ -1,0 +1,15 @@
+<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Arm extending right -->
+  <path d="M 192,240 Q 180,216 162,198" stroke="#FDDBB4" stroke-width="26" fill="none" stroke-linecap="round"/>
+  <!-- Hand/fist -->
+  <ellipse cx="157" cy="190" rx="20" ry="15" fill="#FDDBB4" transform="rotate(-40,157,190)"/>
+  <ellipse cx="155" cy="185" rx="14" ry="9" fill="#EAB989" opacity="0.6"/>
+  <!-- Index finger pointing -->
+  <path d="M 144,182 Q 135,170 131,160" stroke="#FDDBB4" stroke-width="11" fill="none" stroke-linecap="round"/>
+  <ellipse cx="131" cy="158" rx="8" ry="6" fill="#FDDBB4"/>
+  <!-- Pointer tip -->
+  <circle cx="130" cy="154" r="5" fill="#EAB989"/>
+  <!-- Direction arrow hint -->
+  <path d="M 110,150 L 120,150" stroke="#0D9488" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.5"/>
+  <path d="M 117,146 L 122,150 L 117,154" stroke="#0D9488" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+</svg>

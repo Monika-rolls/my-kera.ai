@@ -5,6 +5,7 @@ interface Props { events: ToolEvent[] }
 
 const TOOL_META: Record<string, { label: string; color: string }> = {
   identify_user:         { label: "Identifying patient",      color: "#60a5fa" },
+  fetch_categories:      { label: "Listing departments",      color: "#38bdf8" },
   fetch_doctors:         { label: "Fetching doctors",         color: "#a78bfa" },
   fetch_slots:           { label: "Checking availability",    color: "#818cf8" },
   book_appointment:      { label: "Booking appointment",      color: "#34d399" },
@@ -15,8 +16,8 @@ const TOOL_META: Record<string, { label: string; color: string }> = {
 };
 
 const TOOL_ICON: Record<string, string> = {
-  identify_user: "👤", fetch_doctors: "🏥", fetch_slots: "📅",
-  book_appointment: "✅", retrieve_appointments: "📋",
+  identify_user: "👤", fetch_categories: "🏥", fetch_doctors: "👨‍⚕️",
+  fetch_slots: "📅", book_appointment: "✅", retrieve_appointments: "📋",
   cancel_appointment: "✕", modify_appointment: "✏️", end_conversation: "📝",
 };
 

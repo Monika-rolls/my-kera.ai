@@ -148,6 +148,55 @@ export default function CallSummaryModal({ summary, onClose }: Props) {
             </div>
           )}
 
+          {/* Token usage & cost */}
+          {(summary.tokens_used || summary.estimated_cost_usd !== undefined) && (
+            <div className="bg-slate-800/40 border border-slate-800 rounded-xl p-4">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                Usage &amp; Cost
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {summary.tokens_used && (
+                  <>
+                    <div>
+                      <p className="text-[10px] text-slate-600 mb-0.5">Input tokens</p>
+                      <p className="text-sm font-mono font-semibold text-slate-300">
+                        {summary.tokens_used.prompt_tokens.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-600 mb-0.5">Output tokens</p>
+                      <p className="text-sm font-mono font-semibold text-slate-300">
+                        {summary.tokens_used.completion_tokens.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-600 mb-0.5">Total tokens</p>
+                      <p className="text-sm font-mono font-semibold text-slate-300">
+                        {summary.tokens_used.total_tokens.toLocaleString()}
+                      </p>
+                    </div>
+                  </>
+                )}
+                {summary.estimated_cost_usd !== undefined && (
+                  <div>
+                    <p className="text-[10px] text-slate-600 mb-0.5">Est. cost</p>
+                    <p className="text-sm font-mono font-semibold text-teal-400">
+                      ${summary.estimated_cost_usd < 0.001
+                        ? summary.estimated_cost_usd.toFixed(6)
+                        : summary.estimated_cost_usd.toFixed(4)}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {summary.model && (
+                <p className="text-[10px] text-slate-700 mt-2.5">
+                  Model: {summary.model}
+                  {summary.provider && ` · ${summary.provider}`}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Duration */}
           {summary.call_duration_estimate && (
             <p className="text-xs text-slate-600 text-right">

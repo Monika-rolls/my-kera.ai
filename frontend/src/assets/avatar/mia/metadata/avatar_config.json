@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "name": "Mia",
+  "style": "healthcare-assistant",
+  "viewBox": "0 0 200 240",
+  "layers": ["base", "eyes", "mouth", "gesture"],
+  "expressions": ["idle","listening","thinking","speaking","happy","concern","goodbye"],
+  "mouthStates": ["mouth_closed","mouth_small","mouth_medium","mouth_open","mouth_wide"],
+  "eyeStates": ["eyes_open","eyes_half","eyes_closed"],
+  "gestures": ["wave","point_calendar","typing","namaste"],
+  "amplitudeThresholds": { "mouth_wide": 0.80, "mouth_open": 0.55, "mouth_medium": 0.30, "mouth_small": 0.12 },
+  "blinkConfig": { "minIntervalMs": 2000, "maxIntervalMs": 6000, "halfClosedMs": 60, "closedMs": 80, "reopenMs": 60 },
+  "transitionDurations": { "expression": 200, "eye": 80, "mouth": 60, "gesture": 300 }
+}

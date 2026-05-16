@@ -1,0 +1,26 @@
+<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Left eye -->
+  <ellipse cx="76" cy="95" rx="17" ry="13" fill="white"/>
+  <circle cx="76" cy="95" r="9" fill="#0891B2"/>
+  <circle cx="76" cy="95" r="5.5" fill="#0F172A"/>
+  <circle cx="79" cy="91" r="2.5" fill="white" opacity="0.9"/>
+  <circle cx="72" cy="97" r="1.5" fill="white" opacity="0.5"/>
+  <path d="M 59,95 Q 76,83 93,95" stroke="#1C1C2E" stroke-width="2" fill="none"/>
+  <path d="M 59,95 Q 76,104 93,95" stroke="#C89080" stroke-width="1" fill="none" opacity="0.5"/>
+  <!-- Left lashes -->
+  <line x1="67" y1="88" x2="63" y2="84" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="76" y1="85" x2="76" y2="81" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="85" y1="88" x2="89" y2="84" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Right eye -->
+  <ellipse cx="124" cy="95" rx="17" ry="13" fill="white"/>
+  <circle cx="124" cy="95" r="9" fill="#0891B2"/>
+  <circle cx="124" cy="95" r="5.5" fill="#0F172A"/>
+  <circle cx="127" cy="91" r="2.5" fill="white" opacity="0.9"/>
+  <circle cx="120" cy="97" r="1.5" fill="white" opacity="0.5"/>
+  <path d="M 107,95 Q 124,83 141,95" stroke="#1C1C2E" stroke-width="2" fill="none"/>
+  <path d="M 107,95 Q 124,104 141,95" stroke="#C89080" stroke-width="1" fill="none" opacity="0.5"/>
+  <!-- Right lashes -->
+  <line x1="115" y1="88" x2="111" y2="84" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="124" y1="85" x2="124" y2="81" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="133" y1="88" x2="137" y2="84" stroke="#1C1C2E" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

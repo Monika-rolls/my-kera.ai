@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useVoiceAgent } from "../hooks/useVoiceAgent";
-import Avatar from "./Avatar";
+import AvatarRenderer from "./avatar/AvatarRenderer";
 import TranscriptPanel from "./TranscriptPanel";
 import ToolStatus from "./ToolStatus";
 import CallSummaryModal from "./CallSummary";
+import CallHistory from "./CallHistory";
 import CalendarView from "./CalendarView";
 import { getCategories } from "../lib/api";
 import type { Category } from "../lib/api";
@@ -149,6 +150,7 @@ function CategoryCard({ cat }: { cat: Category }) {
 function LandingScreen({ onStart, error }: { onStart: () => void; error: string | null }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [catsLoading, setCatsLoading] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     getCategories()
@@ -169,12 +171,28 @@ function LandingScreen({ onStart, error }: { onStart: () => void; error: string 
           <p className="text-sm font-semibold text-white leading-none">Mykare Health</p>
           <p className="text-xs text-slate-500 mt-0.5">AI Voice Assistant</p>
         </div>
-        <div className="ml-auto flex items-center gap-2 text-xs text-teal-400
-                        bg-teal-500/10 border border-teal-500/20 px-3 py-1.5 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-          Available 24/7
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={() => setShowHistory(true)}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white
+                       bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600
+                       px-3 py-1.5 rounded-full transition-colors"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5">
+              <rect width="8" height="4" x="8" y="2" rx="1"/>
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            </svg>
+            Call History
+          </button>
+          <div className="flex items-center gap-2 text-xs text-teal-400
+                          bg-teal-500/10 border border-teal-500/20 px-3 py-1.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+            Available 24/7
+          </div>
         </div>
       </header>
+      {showHistory && <CallHistory onClose={() => setShowHistory(false)} />}
 
       {/* ── Two-panel hero ── */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_440px] min-h-0">
@@ -303,7 +321,7 @@ function LandingScreen({ onStart, error }: { onStart: () => void; error: string 
 export default function VoiceInterface() {
   const {
     agentState, transcript, toolEvents, callSummary,
-    isMicMuted, mouthOpenness, startCall, endCall, toggleMic,
+    isMicMuted, mouthOpenness, avatarEvent, startCall, endCall, toggleMic,
   } = useVoiceAgent();
 
   const [showSummary, setShowSummary] = useState(false);
@@ -393,7 +411,7 @@ export default function VoiceInterface() {
 
           {/* Avatar card */}
           <div className="card flex-shrink-0 py-5 px-4 flex flex-col items-center">
-            <Avatar state={agentState} mouthOpenness={mouthOpenness} />
+            <AvatarRenderer agentState={agentState} mouthOpenness={mouthOpenness} avatarEvent={avatarEvent} size={200} />
             <div className="mt-3 text-center">
               <p className="font-display font-bold text-white text-base leading-none">Mia</p>
               <p className="text-[11px] text-slate-500 mt-0.5">AI Healthcare Assistant</p>

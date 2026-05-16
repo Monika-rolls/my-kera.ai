@@ -7,79 +7,88 @@ A production-ready, web-based AI voice agent for healthcare front-desk operation
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         USER BROWSER                            │
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │  Transcript  │  │ Avatar (canvas│  │  Tool Activity Feed  │  │
-│  │    Panel     │  │  + audio sync)│  │  (live tool events)  │  │
-│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
-│                          │                                      │
-│              livekit-client (WebRTC)                            │
-└──────────────────────────┼──────────────────────────────────────┘
-                           │  WebRTC audio + data channel
-┌──────────────────────────▼──────────────────────────────────────┐
-│                    LIVEKIT CLOUD (SFU)                          │
-│              Routes audio & data between participants           │
-└──────────┬──────────────────────────────┬───────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                          USER BROWSER                               │
+│                                                                     │
+│  ┌─────────────┐  ┌──────────────────────┐  ┌────────────────────┐  │
+│  │  Transcript │  │  Avatar (canvas)     │  │  Live Activity     │  │
+│  │  Panel      │  │  mouth synced to TTS │  │  (tool events)     │  │
+│  └─────────────┘  │  + Calendar View     │  └────────────────────┘  │
+│                   └──────────────────────┘                          │
+│                           │                                         │
+│               livekit-client (WebRTC)                               │
+└───────────────────────────┼─────────────────────────────────────────┘
+                            │  WebRTC audio + data channel
+┌───────────────────────────▼─────────────────────────────────────────┐
+│                     LIVEKIT CLOUD (SFU)                             │
+│               Routes audio & data between participants              │
+└──────────┬──────────────────────────────┬───────────────────────────┘
            │ WebSocket                    │ REST
            │                              │
-┌──────────▼────────────┐   ┌────────────▼────────────────────────┐
-│   AGENT WORKER        │   │   FASTAPI REST API                  │
-│   (Docker container)  │   │   (Docker / AWS Lambda)             │
-│                       │   │                                     │
-│  Deepgram STT ──┐     │   │  POST /token   → LiveKit JWT        │
-│                 ▼     │   │  GET  /appointments/:phone          │
-│  GPT-4o LLM ◄──►Tools│   │  POST /appointments                 │
-│  (OpenAI)       │     │   │  DELETE /appointments/:id           │
-│                 ▼     │   │  POST /summary → GPT-4o summary     │
-│  Cartesia TTS ──┘     │   │                                     │
-│                       │   └─────────────────────────────────────┘
-│  Tool events sent     │              │
-│  via data channel ────┼──────────────┘
-│                       │              │
-└───────────────────────┘        ┌─────▼──────┐
-                                 │  SQLITE DB │
-                                 │  (or Supabase│
-                                 │  Postgres) │
-                                 └────────────┘
+┌──────────▼────────────┐   ┌────────────▼──────────────────────────┐
+│   AGENT WORKER        │   │   FASTAPI REST API                    │
+│   (Docker container)  │   │   (Docker / AWS Lambda)               │
+│                       │   │                                       │
+│  Deepgram STT ──┐     │   │  POST /token        → LiveKit JWT     │
+│                 ▼     │   │  GET  /categories   → 10 departments  │
+│  GPT-4o LLM ◄──►Tools│   │  GET  /doctors      → doctor list     │
+│  (OpenAI)       │     │   │  GET  /slots        → available times │
+│                 ▼     │   │  GET  /availability → monthly map     │
+│  Cartesia TTS ──┘     │   │  GET  /appointments/:phone            │
+│                       │   │  POST /appointments                   │
+│  Data channel:        │   │  DELETE /appointments/:id             │
+│  • transcript lines   │   │  POST /summary      → GPT-4o summary  │
+│  • tool events        │   │  GET  /sessions     → call history    │
+│  • call summary       │   │                                       │
+└───────────────────────┘   └───────────────────────────────────────┘
+                                          │
+                                   ┌──────▼──────┐
+                                   │  SQLITE DB  │
+                                   │  (or Supabase│
+                                   │  Postgres)  │
+                                   └─────────────┘
 ```
 
 ### Call Flow (step by step)
 
 ```
-1. User opens browser → clicks "Start Call"
-2. Frontend POSTs to /token → gets LiveKit JWT
-3. Frontend connects to LiveKit Cloud room via WebRTC
-4. LiveKit dispatches a job to the Agent Worker
-5. Agent greets the user (Cartesia TTS → audio → LiveKit → browser)
-6. User speaks → Deepgram STT transcribes → text sent to GPT-4o
-7. GPT-4o decides which tool to call (or what to say)
-8. Tool result → GPT-4o generates reply text
-9. Cartesia TTS converts reply → audio sent back to browser
-10. Agent publishes tool events over LiveKit data channel
-11. Frontend receives data packets → updates UI in real time
-12. Agent calls end_conversation → GPT-4o generates JSON summary
+1.  User opens browser → clicks "Start Call"
+2.  Frontend POSTs to /token → gets LiveKit JWT
+3.  Frontend connects to LiveKit Cloud room via WebRTC
+4.  LiveKit dispatches a job to the Agent Worker
+5.  Agent greets the user (Cartesia TTS → audio → LiveKit → browser)
+6.  User speaks → Deepgram STT transcribes → text sent to GPT-4o
+7.  GPT-4o decides which tool to call (or what to say)
+8.  Tool result → GPT-4o generates reply text
+9.  Cartesia TTS converts reply → audio sent back to browser
+10. Agent publishes transcript lines + tool events via LiveKit data channel
+11. Frontend receives data packets → updates transcript + Live Activity in real time
+12. Agent calls end_conversation → generates JSON call summary
 13. Summary sent via data channel → frontend shows summary modal
+14. Session saved to call_sessions table → visible in Call History
 ```
 
 ### Tool Calling Flow
 
 ```
-User: "I'd like to book an appointment for tomorrow at 10am"
+User: "I want to book a cardiology appointment for tomorrow at 10am"
 
 GPT-4o decides:
-  1. identify_user(phone_number)        → check/create patient record
-  2. fetch_slots("2025-04-30")          → confirm 10:00 is free
-  3. book_appointment(name, phone,      → insert row, prevent conflicts
-                      date, time)
-  4. [speaks confirmation to user]
-  5. end_conversation()                 → generate + send summary
+  1. identify_user(phone_number)           → check/create patient record
+  2. fetch_categories()                    → list available departments
+  3. fetch_doctors(category_id=2)          → Dr. Rajesh Nair (Cardiology)
+  4. fetch_slots("2026-05-17", doctor_id=2)→ confirm 10:00 is free
+  5. book_appointment(name, phone,
+                      date, time,
+                      doctor_id, category) → insert row, prevent conflicts
+  6. [speaks confirmation to user]
+  7. end_conversation()                    → generate + send summary
+                                           → save to call_sessions table
 ```
 
 Each tool call triggers a real-time event on the frontend:
 - **Calling** → amber spinner
-- **Success** → teal checkmark + result data
+- **Success** → teal checkmark + result data snippet
 - **Error** → red cross + error message
 
 ---
@@ -91,13 +100,42 @@ Each tool call triggers a real-time event on the frontend:
 | STT (Speech-to-Text) | [Deepgram](https://deepgram.com) |
 | LLM | [OpenAI GPT-4o](https://platform.openai.com) |
 | TTS (Text-to-Speech) | [Cartesia](https://cartesia.ai) |
-| Voice Agent Framework | [LiveKit Agents](https://docs.livekit.io/agents) |
+| Voice Agent Framework | [LiveKit Agents 1.5.x](https://docs.livekit.io/agents) |
 | WebRTC Infrastructure | [LiveKit Cloud](https://cloud.livekit.io) |
-| Avatar | Custom canvas animation (no external API) |
+| Avatar | Custom canvas animation (60fps, mouth synced to audio via Web Audio API) |
 | Backend API | Python FastAPI + Mangum (Lambda adapter) |
-| Database | SQLite (dev) / Supabase PostgreSQL (prod) |
+| Database | SQLite (dev) / Supabase PostgreSQL (prod) via SQLAlchemy async |
 | Frontend | Vite + React + TypeScript + Tailwind CSS |
 | Deployment | Docker Compose + Serverless Framework (AWS) |
+
+---
+
+## Features
+
+### Voice & AI
+- **Natural conversation** — patients speak freely; GPT-4o understands context across turns
+- **Real-time transcript** — every user and AI utterance appears in the chat panel as it happens
+- **Live activity feed** — every tool call (identify, fetch slots, book, etc.) shown with live status
+- **Mouth-sync avatar** — canvas animation driven by Web Audio API frequency analysis
+- **Mute / unmute** — microphone toggle without dropping the call
+
+### Appointments
+- **10 medical departments** — General Medicine, Cardiology, Ophthalmology, Gastroenterology, Pediatrics, Orthopedics, Dermatology, ENT, Neurology, Gynecology
+- **10 specialist doctors** — one per department, each with individual weekly schedules and time slots
+- **Conflict-free booking** — slot availability checked per doctor before confirming
+- **Modify & cancel** — full rescheduling with conflict detection
+
+### Calendar View
+- **Monthly availability grid** — colour-coded by slot count per day
+- **Department filter** — filter availability by any of the 10 categories
+- **Slot inspector** — click a date to see exact available time slots
+- **Patient appointment highlights** — patient's own bookings marked once identified
+
+### Call Summary & History
+- **Auto-generated summary** — GPT-4o JSON summary at end of call (intent, sentiment, appointments, preferences, follow-up flag)
+- **Token & cost tracking** — input/output tokens and estimated USD cost per call
+- **Google Sheets export** — summary automatically saved to a configured spreadsheet (optional)
+- **Call History panel** — browse all past Mia sessions with patient name, intent, sentiment, cost, and a "Summary" button to re-open the full modal
 
 ---
 
@@ -111,11 +149,16 @@ Voice_agents/
 │
 ├── backend/
 │   ├── app/
-│   │   ├── agent.py              ← LiveKit voice agent "Mia" + all 7 tools
-│   │   ├── main.py               ← FastAPI REST endpoints
-│   │   ├── tools.py              ← DB tool implementations (book/cancel/etc.)
-│   │   ├── database.py           ← SQLAlchemy models (User, Appointment)
-│   │   ├── summary.py            ← GPT-4o call summary generator
+│   │   ├── agent.py              ← LiveKit voice agent "Mia" + all tools
+│   │   │                           Uses ctx.room directly; publishes transcript,
+│   │   │                           tool events, and call summary via data channel
+│   │   ├── main.py               ← FastAPI REST API (10 endpoints)
+│   │   ├── tools.py              ← DB tool implementations + save_call_session
+│   │   ├── database.py           ← SQLAlchemy models:
+│   │   │                             User, Appointment, Doctor, Category,
+│   │   │                             CallSession
+│   │   ├── summary.py            ← GPT-4o call summary generator (JSON structured)
+│   │   ├── sheets.py             ← Google Sheets integration (optional)
 │   │   └── config.py             ← Pydantic settings from .env
 │   ├── Dockerfile                ← FastAPI API container
 │   ├── Dockerfile.agent          ← LiveKit agent worker container
@@ -125,18 +168,36 @@ Voice_agents/
 └── frontend/
     ├── src/
     │   ├── components/
-    │   │   ├── Avatar.tsx         ← 60fps canvas face: blinks, mouth synced to audio
-    │   │   ├── VoiceInterface.tsx ← Main 3-panel layout + call controls
-    │   │   ├── ToolStatus.tsx     ← Live tool call activity feed
-    │   │   ├── TranscriptPanel.tsx← Conversation history (user + AI bubbles)
-    │   │   └── CallSummary.tsx    ← End-of-call summary modal
+    │   │   ├── Avatar.tsx          ← 60fps canvas face: blinks, mouth synced to TTS audio
+    │   │   ├── VoiceInterface.tsx  ← Landing page + in-call 3-panel layout + controls
+    │   │   ├── TranscriptPanel.tsx ← Live conversation history (user + Mia bubbles)
+    │   │   ├── ToolStatus.tsx      ← Live tool call activity feed (calling/success/error)
+    │   │   ├── CallSummary.tsx     ← End-of-call summary modal (intent, sentiment,
+    │   │   │                          appointments, tokens used, cost, Sheets badge)
+    │   │   ├── CallHistory.tsx     ← Call history modal: session list + summary viewer
+    │   │   └── CalendarView.tsx    ← Monthly availability calendar with dept filter
     │   ├── hooks/
-    │   │   └── useVoiceAgent.ts   ← LiveKit room, audio analyser, data events
+    │   │   └── useVoiceAgent.ts    ← LiveKit room, audio analyser, transcript/tool/
+    │   │                              summary state, auto-summary fallback on hang-up
     │   └── lib/
-    │       └── api.ts             ← Backend API client (axios)
-    ├── Dockerfile                 ← Multi-stage build → nginx
+    │       └── api.ts              ← Backend API client (axios) — all types exported
+    ├── Dockerfile                  ← Multi-stage build → nginx
     └── nginx.conf
 ```
+
+---
+
+## Database Models
+
+| Table | Purpose |
+|-------|---------|
+| `users` | Patient records (phone, name, email) |
+| `categories` | 10 medical departments with icons |
+| `doctors` | 10 specialists with weekly schedules and time slots |
+| `appointments` | Booked/cancelled appointments linked to user + doctor + category |
+| `call_sessions` | Every completed call: summary text, full summary JSON, tokens, cost |
+
+The database auto-seeds on first start with all 10 categories and doctors.
 
 ---
 
@@ -193,9 +254,44 @@ Open **http://localhost:3000** in your browser.
 
 1. Click **Start Call** — the browser will ask for microphone permission
 2. Wait for Mia to greet you
-3. Say: *"Hi, my number is 9876543210, I want to book an appointment"*
-4. Follow the conversation to book, check, or cancel
+3. Say: *"Hi, my number is 9876543210 and email is test@example.com, I want to book a cardiology appointment"*
+4. Follow the conversation to pick a doctor, date, and time
 5. Say *"That's all, goodbye"* to trigger the call summary
+6. After the call ends, click **Call History** in the navbar to see the session logged
+
+---
+
+## REST API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/token` | Create LiveKit JWT + dispatch agent to room |
+| `GET` | `/health` | Health check |
+| `GET` | `/categories` | List all 10 medical departments |
+| `GET` | `/doctors` | List doctors (filter by `specialization` or `category_id`) |
+| `GET` | `/slots` | Available time slots for a date (filter by `doctor_id` or `category_id`) |
+| `GET` | `/availability` | Slot count per day for a year/month (for calendar) |
+| `GET` | `/appointments/:phone` | All appointments for a patient |
+| `POST` | `/appointments` | Create appointment (conflict-checked) |
+| `DELETE` | `/appointments/:id` | Cancel appointment |
+| `POST` | `/summary` | Generate GPT-4o call summary from transcript |
+| `GET` | `/sessions` | List all call sessions (newest first, `?limit=50`) |
+
+---
+
+## Supported Tools (Agent Capabilities)
+
+| Tool | What it does |
+|------|-------------|
+| `identify_user` | Looks up or registers a patient by phone number and email |
+| `fetch_categories` | Returns all 10 medical departments with icons |
+| `fetch_doctors` | Lists doctors, optionally filtered by category |
+| `fetch_slots` | Returns available times for a date (per doctor or category) |
+| `book_appointment` | Saves appointment to DB, prevents double-booking |
+| `retrieve_appointments` | Lists all appointments for the current patient |
+| `cancel_appointment` | Marks an appointment as cancelled |
+| `modify_appointment` | Reschedules to a new date/time (checks conflicts) |
+| `end_conversation` | Generates GPT-4o JSON summary → sends to frontend → saves session |
 
 ---
 
@@ -215,14 +311,12 @@ docker-compose up -d --build
 
 ### Option B — Serverless REST API + Docker Agent
 
-The REST API (`/token`, `/appointments`, `/summary`) can run on AWS Lambda — it's stateless and fast.
-The agent worker **must** run as a persistent container (it holds a WebSocket to LiveKit Cloud).
+The REST API is stateless and can run on AWS Lambda. The agent worker must run as a persistent container (it holds a WebSocket to LiveKit Cloud).
 
 **Deploy REST API to Lambda:**
 ```bash
 cd backend
 npm install -g serverless
-# Set env vars in AWS SSM or export them locally:
 export LIVEKIT_URL=...  OPENAI_API_KEY=...  # etc.
 serverless deploy --region us-east-1
 ```
@@ -247,40 +341,17 @@ DEEPGRAM_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 CARTESIA_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 DATABASE_URL=sqlite+aiosqlite:///./appointments.db
+
+# Optional — Google Sheets integration
+GOOGLE_SHEETS_CREDENTIALS_JSON={"type":"service_account",...}
+GOOGLE_SHEETS_SPREADSHEET_ID=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms
 ```
 
 ### Frontend `.env` (only needed for local dev outside Docker)
 
 ```env
 VITE_API_URL=http://localhost:8000
-VITE_LIVEKIT_URL=wss://your-project.livekit.cloud
 ```
-
----
-
-## Supported Tools (Agent Capabilities)
-
-| Tool | What it does |
-|------|-------------|
-| `identify_user` | Looks up or registers a patient by phone number |
-| `fetch_slots` | Returns available appointment times for a date |
-| `book_appointment` | Saves appointment to DB, prevents double-booking |
-| `retrieve_appointments` | Lists all appointments for the current patient |
-| `cancel_appointment` | Marks an appointment as cancelled |
-| `modify_appointment` | Reschedules to a new date/time (checks conflicts) |
-| `end_conversation` | Generates GPT-4o JSON summary, sends to frontend |
-
----
-
-## Cost Estimate per Call (~5 min)
-
-| Service | Usage | Est. Cost |
-|---------|-------|----------|
-| Deepgram STT | ~300 words | ~$0.004 |
-| Cartesia TTS | ~200 words | ~$0.003 |
-| OpenAI GPT-4o | ~2k tokens | ~$0.01 |
-| LiveKit Cloud | 5 min audio | ~$0.003 |
-| **Total** | | **~$0.02 / call** |
 
 ---
 
@@ -305,5 +376,19 @@ python -m app.agent dev
 cd frontend
 npm install
 cp .env.example .env   # set VITE_API_URL=http://localhost:8000
-npm run dev   # → http://localhost:3000
+npm run dev   # → http://localhost:5173
 ```
+
+---
+
+## Cost Estimate per Call (~5 min)
+
+| Service | Usage | Est. Cost |
+|---------|-------|----------|
+| Deepgram STT | ~300 words | ~$0.004 |
+| Cartesia TTS | ~200 words | ~$0.003 |
+| OpenAI GPT-4o | ~3–5k tokens | ~$0.02–0.05 |
+| LiveKit Cloud | 5 min audio | ~$0.003 |
+| **Total** | | **~$0.03–0.06 / call** |
+
+Exact token usage and USD cost are shown in the Call Summary modal and stored in the `call_sessions` table for every call.

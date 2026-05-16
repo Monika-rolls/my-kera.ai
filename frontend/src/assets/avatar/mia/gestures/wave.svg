@@ -1,0 +1,16 @@
+<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Arm on right side -->
+  <path d="M 188,240 Q 178,212 162,192" stroke="#FDDBB4" stroke-width="26" fill="none" stroke-linecap="round"/>
+  <!-- Hand blob -->
+  <ellipse cx="158" cy="183" rx="22" ry="16" fill="#FDDBB4" transform="rotate(-30,158,183)"/>
+  <!-- Simplified fingers -->
+  <path d="M 146,172 Q 141,159 144,151" stroke="#FDDBB4" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <path d="M 154,167 Q 150,154 153,146" stroke="#FDDBB4" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <path d="M 162,168 Q 160,154 163,147" stroke="#FDDBB4" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <path d="M 169,172 Q 169,158 171,151" stroke="#FDDBB4" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- Knuckle detail -->
+  <ellipse cx="157" cy="172" rx="14" ry="8" fill="#EAB989" opacity="0.7"/>
+  <!-- Motion arcs -->
+  <path d="M 132,152 Q 126,146 129,139" stroke="#0D9488" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.5"/>
+  <path d="M 126,160 Q 120,153 123,145" stroke="#0D9488" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.35"/>
+</svg>

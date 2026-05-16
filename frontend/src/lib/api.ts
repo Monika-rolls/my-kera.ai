@@ -71,6 +71,25 @@ export async function postSummary(transcript: Message[], appointments: unknown[]
   return res.data as CallSummary;
 }
 
+export interface CallSessionRecord {
+  id: number;
+  room_name: string;
+  phone_number: string | null;
+  user_name: string | null;
+  intent: string;
+  sentiment: string;
+  summary_text: string | null;
+  summary_json: CallSummary | null;
+  tokens_total: number | null;
+  cost_usd: number | null;
+  created_at: string | null;
+}
+
+export async function getCallSessions(limit = 50): Promise<CallSessionRecord[]> {
+  const res = await api.get("/sessions", { params: { limit } });
+  return res.data as CallSessionRecord[];
+}
+
 // ── Slots / availability ──────────────────────────────────────────────────────
 
 export async function getSlots(
@@ -124,6 +143,12 @@ export interface ToolEvent {
   timestamp: string;
 }
 
+export interface TokensUsed {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 export interface CallSummary {
   summary: string;
   user_name: string | null;
@@ -135,4 +160,8 @@ export interface CallSummary {
   sentiment: "positive" | "neutral" | "negative";
   call_duration_estimate?: string;
   sheets_saved?: boolean;
+  tokens_used?: TokensUsed;
+  estimated_cost_usd?: number;
+  model?: string;
+  provider?: string;
 }
